@@ -1,0 +1,9 @@
+flask
+mlxtend
+numpy
+pandas
+polars
+efficient_apriori
+psutil
+gunicorn
+pyarrow

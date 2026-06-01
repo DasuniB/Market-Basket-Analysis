@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Market Basket Analysis</title>
+    <style>
+        body { font-family: Arial; max-width: 800px; margin: 0 auto; padding: 20px; }
+        h1 { color: #333; }
+        input, button { padding: 8px; margin: 5px 0; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .error { color: red; }
+        .loading { display: none; }
+    </style>
+</head>
+<body>
+    <h1>Market Basket Analysis</h1>
+
+    <div style="margin-bottom: 20px;">
+        <a href="/upload" style="color: #007bff; text-decoration: none;">Upload CSV & Train Model</a>
+    </div>
+
+    <div>
+        <label for="items">Enter Product IDs (comma-separated):</label><br>
+        <input type="text" id="items" placeholder="e.g. 1001, 1002, 1003" style="width: 300px;">
+        <button id="submitBtn">Get Recommendations</button>
+    </div>
+
+    <div id="error" class="error" style="display: none;"></div>
+    <div id="loading" class="loading">Loading recommendations...</div>
+
+    <table id="results" style="display: none;">
+        <thead>
+            <tr>
+                <th>Product ID</th>
+                <th>Product Name</th>
+                <th>Probability (%)</th>
+            </tr>
+        </thead>
+        <tbody id="resultsBody"></tbody>
+    </table>
+
+    <script>
+        document.getElementById('submitBtn').addEventListener('click', async function() {
+            const itemsInput = document.getElementById('items');
+            const errorDiv = document.getElementById('error');
+            const loadingDiv = document.getElementById('loading');
+            const resultsTable = document.getElementById('results');
+            const resultsBody = document.getElementById('resultsBody');
+
+            // Clear previous results
+            errorDiv.style.display = 'none';
+            resultsTable.style.display = 'none';
+            loadingDiv.style.display = 'block';
+
+            // Get items from input
+            const itemsText = itemsInput.value;
+            const itemsArray = itemsText.split(',').map(item => item.trim()).filter(item => item);
+
+            if (itemsArray.length === 0) {
+                errorDiv.textContent = 'Please enter at least one product ID';
+                errorDiv.style.display = 'block';
+                loadingDiv.style.display = 'none';
+                return;
+            }
+
+            try {
+                const response = await fetch('/recommend', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ item_to_check: itemsArray })
+                });
+
+                const data = await response.json();
+
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                // Display results
+                resultsBody.innerHTML = '';
+
+                if (data.recommended_items && data.recommended_items.length > 0) {
+                    data.recommended_items.forEach(item => {
+                        const row = document.createElement('tr');
+
+                        const idCell = document.createElement('td');
+                        idCell.textContent = item.product_id;
+
+                        const nameCell = document.createElement('td');
+                        nameCell.textContent = item.product_name;
+
+                        const probCell = document.createElement('td');
+                        probCell.textContent = item.probability_percent + '%';
+
+                        row.appendChild(idCell);
+                        row.appendChild(nameCell);
+                        row.appendChild(probCell);
+
+                        resultsBody.appendChild(row);
+                    });
+
+                    resultsTable.style.display = 'table';
+                } else {
+                    errorDiv.textContent = 'No recommendations found for these products.';
+                    errorDiv.style.display = 'block';
+                }
+            } catch (err) {
+                errorDiv.textContent = `Error: ${err.message}`;
+                errorDiv.style.display = 'block';
+            } finally {
+                loadingDiv.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>

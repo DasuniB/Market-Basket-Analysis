@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Upload CSV for Market Basket Analysis</title>
+    <style>
+        body { font-family: Arial; max-width: 800px; margin: 0 auto; padding: 20px; }
+        h1 { color: #333; }
+        .container { margin-top: 20px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; }
+        .btn {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        .btn:hover { background-color: #45a049; }
+        .alert {
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+            display: none;
+        }
+        .alert-success { background-color: #dff0d8; color: #3c763d; }
+        .alert-danger { background-color: #f2dede; color: #a94442; }
+        .loading {
+            display: none;
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+        .progress-container {
+            width: 100%;
+            background-color: #e9ecef;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        .progress-bar {
+            height: 20px;
+            background-color: #4CAF50;
+            border-radius: 4px;
+            width: 0%;
+            text-align: center;
+            line-height: 20px;
+            color: white;
+        }
+        .error-details {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #f8d7da;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            max-height: 200px;
+            overflow-y: auto;
+            display: none;
+        }
+        .requirements {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 20px;
+        }
+        .nav-link {
+            display: inline-block;
+            margin-top: 20px;
+            color: #007bff;
+            text-decoration: none;
+        }
+        .nav-link:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <h1>Upload CSV for Market Basket Analysis</h1>
+
+    <div class="container">
+        <div id="success-alert" class="alert alert-success"></div>
+        <div id="error-alert" class="alert alert-danger"></div>
+
+        <form id="upload-form" enctype="multipart/form-data">
+            <div class="form-group">
+                <label for="file">Select CSV File:</label>
+                <input type="file" id="file" name="file" accept=".csv" required>
+            </div>
+            <div class="form-group">
+                <label for="model_filename">Model Filename (optional):</label>
+                <input type="text" id="model_filename" name="model_filename" placeholder="e.g. my_test_model.pkl">
+                <small style="display: block; color: #6c757d; margin-top: 5px;">Leave empty to use the default filename (new_trained_model.pkl)</small>
+            </div>
+            <button type="submit" class="btn">Upload and Train Model</button>
+        </form>
+
+        <div id="loading" class="loading">
+            <p><strong>Processing your data and training the model.</strong></p>
+            <p id="processing-status">Uploading file...</p>
+            <div class="progress-container">
+                <div id="progress-bar" class="progress-bar">0%</div>
+            </div>
+            <p><small>This process may take several minutes for large datasets (up to 30 minutes for very large files). Please be patient and do not close this window.</small></p>
+        </div>
+
+        <div id="error-details" class="error-details"></div>
+
+        <div class="requirements">
+            <h3>CSV Requirements:</h3>
+            <p>Your CSV file must contain the following columns:</p>
+            <ul>
+                <li><strong>InvoiceNumber</strong>: A unique identifier for each transaction</li>
+                <li><strong>ProductID</strong>: A unique identifier for each product</li>
+                <li><strong>ProductName</strong>: The name of the product</li>
+            </ul>
+            <p>Additional columns are allowed but will be ignored during processing.</p>
+
+
+        </div>
+
+        <a href="/" class="nav-link">Back to Recommendations</a>
+    </div>
+
+    <script>
+        document.getElementById('upload-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const fileInput = document.getElementById('file');
+            const successAlert = document.getElementById('success-alert');
+            const errorAlert = document.getElementById('error-alert');
+            const loadingDiv = document.getElementById('loading');
+            const processingStatus = document.getElementById('processing-status');
+            const progressBar = document.getElementById('progress-bar');
+            const errorDetails = document.getElementById('error-details');
+
+            // Hide alerts and error details
+            successAlert.style.display = 'none';
+            errorAlert.style.display = 'none';
+            errorDetails.style.display = 'none';
+
+            // Check if file is selected
+            if (!fileInput.files.length) {
+                errorAlert.textContent = 'Please select a file to upload.';
+                errorAlert.style.display = 'block';
+                return;
+            }
+
+            const file = fileInput.files[0];
+            const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
+
+            // Check file size
+            if (file.size > 50 * 1024 * 1024) { // 50MB
+                errorAlert.textContent = `File size (${fileSizeMB}MB) is too large. Please use a file smaller than 50MB.`;
+                errorAlert.style.display = 'block';
+                return;
+            }
+
+            // Show loading indicator
+            loadingDiv.style.display = 'block';
+            processingStatus.textContent = `Uploading file (${fileSizeMB}MB)...`;
+            progressBar.style.width = '10%';
+            progressBar.textContent = '10%';
+
+            // Create FormData object
+            const formData = new FormData();
+            formData.append('file', file);
+
+            // Add model filename if provided
+            const modelFilename = document.getElementById('model_filename').value.trim();
+            if (modelFilename) {
+                formData.append('model_filename', modelFilename);
+            }
+
+            try {
+                console.log('Starting fetch request to /upload');
+                console.log(`File size: ${fileSizeMB}MB, Name: ${file.name}, Type: ${file.type}`);
+
+                // Set up timeout for large files (30 minutes to match backend)
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 1800000); // 30 minute timeout
+
+                // Start the fetch with progress tracking
+                processingStatus.textContent = 'Sending data to server...';
+                progressBar.style.width = '20%';
+                progressBar.textContent = '20%';
+
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData,
+                    signal: controller.signal
+                });
+
+                // Clear the timeout
+                clearTimeout(timeoutId);
+
+                console.log('Fetch response received:', response.status, response.statusText);
+                processingStatus.textContent = 'Processing response...';
+                progressBar.style.width = '80%';
+                progressBar.textContent = '80%';
+
+                if (!response.ok) {
+                    // If the server returns an error response
+                    try {
+                        const errorData = await response.json();
+                        console.error('Server error details:', errorData);
+
+                        // Display detailed error information
+                        errorAlert.textContent = 'Error: ' + (errorData.error || `Server error: ${response.status}`);
+
+                        // Show traceback if available
+                        if (errorData.traceback) {
+                            errorDetails.textContent = errorData.traceback;
+                            errorDetails.style.display = 'block';
+                        }
+
+                        throw new Error(errorData.error || `Server error: ${response.status} ${response.statusText}`);
+                    } catch (jsonError) {
+                        // If we can't parse the error as JSON
+                        throw new Error(`Server error: ${response.status} ${response.statusText}`);
+                    }
+                }
+
+                const result = await response.json();
+                console.log('Response parsed successfully:', result);
+
+                // Update progress to 100%
+                processingStatus.textContent = 'Processing complete!';
+                progressBar.style.width = '100%';
+                progressBar.textContent = '100%';
+
+                // Show success message
+                successAlert.innerHTML = `${result.message}.<br>
+                Processed ${result.rows_processed} rows and generated ${result.rules_generated} rules.<br>
+                Model saved as: <strong>${result.model_filename}</strong>`;
+                successAlert.style.display = 'block';
+
+                // Reset form
+                document.getElementById('upload-form').reset();
+            } catch (error) {
+                console.error('Error during upload:', error);
+
+                // Check for specific error types
+                if (error.name === 'AbortError') {
+                    errorAlert.innerHTML = '<strong>Request Timeout:</strong> The request timed out. Your file may be too large or the server is taking too long to process it.';
+                } else if (error.message.includes('400') || error.message.includes('500')) {
+                    // Likely a server resource issue
+                    errorAlert.innerHTML = `<strong>Server Error:</strong> ${error.message}<br><br>
+                        <strong>This may be due to insufficient memory.</strong><br>
+                        Possible solution: Try a smaller dataset`;
+                } else {
+                    errorAlert.textContent = 'An error occurred: ' + error.message;
+                }
+
+                errorAlert.style.display = 'block';
+            } finally {
+                // Hide loading indicator after a short delay to ensure user sees the 100% if successful
+                setTimeout(() => {
+                    loadingDiv.style.display = 'none';
+                }, 1000);
+            }
+        });
+    </script>
+</body>
+</html>
